@@ -39,17 +39,23 @@ function isBlocked(content) {
 
 async function scrapeSingle(page, asin) {
 
-  await page.goto(`https://www.amazon.in/dp/${asin}`, {
-    waitUntil: 'domcontentloaded',
-    timeout: 60000
+await page.goto(`https://www.amazon.in/dp/${asin}`, {
+  waitUntil: 'domcontentloaded',
+  timeout: 60000
+});
+
+await page.waitForTimeout(4000);
+
+const content = await page.content();
+
+if (isBlocked(content)) {
+  await page.screenshot({
+    path: `debug-${asin}.png`,
+    fullPage: true
   });
 
-  await page.waitForTimeout(4000);
-
-  const content = await page.content();
-  if (isBlocked(content)) {
-    throw new Error("BLOCKED_BY_AMAZON");
-  }
+  throw new Error("BLOCKED_BY_AMAZON");
+}
 
   const price = await page.evaluate(() => {
     const offscreen = document.querySelector('.a-price .a-offscreen');
