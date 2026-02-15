@@ -31,3 +31,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scraper.js
+        - name: Upload Debug Screenshots
+  uses: actions/upload-artifact@v3
+  with:
+    name: debug-screenshots
+    path: scraper/debug-*.png
