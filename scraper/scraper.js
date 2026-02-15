@@ -136,8 +136,6 @@ console.log("ASINs fetched:", asins.length);
 
           const result = await scrapeSingle(page, asin);
 
-processed++;
-console.log("Processed count:", processed);
 
           await supabase
             .from('amazon_price_history')
@@ -146,6 +144,9 @@ console.log("Processed count:", processed);
               price: result.price,
               is_limited_time_deal: result.isDeal
             });
+
+processed++;
+console.log("Processed count:", processed);
 
           success = true;
           break;

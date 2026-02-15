@@ -33,7 +33,7 @@ jobs:
         run: node scraper.js
 
       - name: Upload Debug Screenshots
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots
           path: scraper/debug-*.png
