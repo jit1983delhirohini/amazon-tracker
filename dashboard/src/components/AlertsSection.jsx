@@ -141,12 +141,31 @@ setPriceDrops(drops);
 
 
     /* ================= DEAL ALERTS ================= */
-    const { data: dealData } = await supabase
-      .from("v_amazon_latest_price")
-      .select("*")
-      .eq("is_limited_time_deal", true);
+/* ================= LIMITED TIME DEALS ================= */
 
-    setDealAlerts(dealData || []);
+const { data: dealData, error: dealError } = await supabase
+.from("v_limited_time_deals")
+.select("*")
+.order("checked_at", { ascending: false });
+
+
+if (dealError) {
+  console.error("Deal fetch error:", dealError);
+}
+
+setDealAlerts(
+  (dealData || []).map(item => ({
+    Asin: item.asin,
+Brand: item.brand || "",
+Product_Name: item.product_title || "",
+
+    Price: item.price,
+    Checked_at: item.checked_at
+  }))
+);
+
+
+
 
     setLoading(false);
   }
@@ -503,11 +522,11 @@ setPriceDrops(drops);
               </tr>
             </thead>
             <tbody>
-              {dealAlerts.map((item) => (
-                <tr key={item.asin}>
-                  <td style={thTdStyle}>{item.asin}</td>
-                  <td style={thTdStyle}>{item.brand}</td>
-                  <td style={thTdStyle}>{item.product_title}</td>
+{dealAlerts.map((item) => (
+  <tr key={item.Asin + item.Checked_at}>
+                  <td style={thTdStyle}>{item.Asin}</td>
+                  <td style={thTdStyle}>{item.Brand}</td>
+                  <td style={thTdStyle}>{item.Product_Name}</td>
                   <td
                     style={{
                       ...thTdStyle,
@@ -515,10 +534,10 @@ setPriceDrops(drops);
                       fontWeight: 600,
                     }}
                   >
-                    ₹{item.price}
+                    ₹{item.Price}
                   </td>
                   <td style={thTdStyle}>
-                    {formatDateTime(item.checked_at)}
+                    {formatDateTime(item.Checked_at)}
                   </td>
                 </tr>
               ))}
