@@ -92,7 +92,8 @@ const { data: asins, error } = await supabase
   .from("amazon_asins")
   .select("asin")
   .eq("is_active", true)
-  .limit(2);
+  console.log("TOTAL ASINS FROM DB:", asins.length);
+  //.limit(2); use only if want to test for 2 ASIN
 
 if (error) {
   console.error("Error fetching ASINs:", error);
@@ -111,6 +112,8 @@ console.log("ASINs fetched:", asins.length);
   const browser = await chromium.launch({ headless: true });
 
   let failedAsins = [];
+  let processed = 0;
+
 
   for (let i = 0; i < asins.length; i += BATCH_SIZE) {
 
@@ -132,6 +135,9 @@ console.log("ASINs fetched:", asins.length);
           console.log("Checking:", asin);
 
           const result = await scrapeSingle(page, asin);
+
+processed++;
+console.log("Processed count:", processed);
 
           await supabase
             .from('amazon_price_history')
