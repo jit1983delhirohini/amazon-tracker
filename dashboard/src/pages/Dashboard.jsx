@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import MainLayout from "../layout/MainLayout";
 import { supabase } from "../supabase";
+//import AlertsSection from "../components/AlertsSection";
+import EnterpriseLoader from "../components/EnterpriseLoader";
 
-export default function Dashboard({ session }) {
+
+
+import { useAuth } from "../context/AuthContext";
+
+export default function Dashboard() {
+  const { user } = useAuth();
   const [asins, setAsins] = useState([]);
   const [brands, setBrands] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState("ALL");
@@ -171,7 +178,7 @@ const formatIST = (utcDate) => {
   /* ================= UI ================= */
 
   return (
-    <MainLayout user={session.user}>
+    <MainLayout user={user}>
       <div style={styles.container}>
 
         <div style={styles.headerRow}>
@@ -244,8 +251,9 @@ const formatIST = (utcDate) => {
 
         <div style={styles.card}>
           {loading ? (
-            <p style={styles.loading}>Loading...</p>
-          ) : latestData ? (
+   <EnterpriseLoader text="Loading Dashboard..." />
+) : latestData ? (
+
             <>
               <h3 style={styles.title}>
                 {selectedProduct?.product_title || selectedAsin}

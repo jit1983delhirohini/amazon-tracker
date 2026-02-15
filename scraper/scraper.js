@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
+
 console.log("SUPABASE URL:", process.env.SUPABASE_URL);
 
 const BATCH_SIZE = 10;
@@ -39,23 +40,53 @@ function isBlocked(content) {
 
 async function scrapeSingle(page, asin) {
 
-await page.goto(`https://www.amazon.in/dp/${asin}`, {
-  waitUntil: 'domcontentloaded',
-  timeout: 60000
-});
-
-await page.waitForTimeout(4000);
-
-const content = await page.content();
-
-if (isBlocked(content)) {
-  await page.screenshot({
-    path: `debug-${asin}.png`,
-    fullPage: true
+  await page.goto(`https://www.amazon.in/dp/${asin}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 60000
   });
 
-  throw new Error("BLOCKED_BY_AMAZON");
-}
+  await page.waitForTimeout(4000);
+
+  const content = await page.content();
+
+  if (isBlocked(content)) {
+    await page.screenshot({
+      path: `debug-${asin}.png`,
+      fullPage: true
+    });
+
+    throw new Error("BLOCKED_BY_AMAZON");
+  }
+
+  // 🔴 AVAILABILITY CHECK (NEW LOGIC)
+  const availabilityStatus = await page.evaluate(() => {
+
+    const bodyText = document.body.innerText.toLowerCase();
+
+    const hasCurrentlyUnavailable =
+      bodyText.includes("currently unavailable");
+
+    const hasTempOutOfStock =
+      bodyText.includes("temporarily out of stock");
+
+    const addToCartButton =
+      document.querySelector("#add-to-cart-button");
+
+    if (hasCurrentlyUnavailable || hasTempOutOfStock || !addToCartButton) {
+      return "unavailable";
+    }
+
+    return "available";
+  });
+
+  // If unavailable → return safely (do NOT throw)
+  if (availabilityStatus === "unavailable") {
+    return {
+      price: null,
+      isDeal: false,
+      availability: "unavailable"
+    };
+  }
 
   const price = await page.evaluate(() => {
     const offscreen = document.querySelector('.a-price .a-offscreen');
@@ -81,45 +112,45 @@ if (isBlocked(content)) {
 
   if (!price) throw new Error("PRICE_NOT_FOUND");
 
-  return { price, isDeal };
+  return {
+    price,
+    isDeal,
+    availability: "available"
+  };
 }
 
 async function runScraper() {
 
   console.log("🚀 SAFE MODE WITH RECOVERY");
 
-const { data: asins, error } = await supabase
-  .from("amazon_asins")
-  .select("asin")
-  .eq("is_active", true)
+  const { data: asins, error } = await supabase
+    .from("amazon_asins")
+    .select("asin")
+    .eq("is_active", true);
+
+  if (error) {
+    console.error("Error fetching ASINs:", error);
+    process.exit(1);
+  }
+
+  if (!asins || asins.length === 0) {
+    console.error("No ASINs found in database.");
+    process.exit(1);
+  }
+
   console.log("TOTAL ASINS FROM DB:", asins.length);
-  //.limit(2); use only if want to test for 2 ASIN
-
-if (error) {
-  console.error("Error fetching ASINs:", error);
-  process.exit(1);
-}
-
-if (!asins || asins.length === 0) {
-  console.error("No ASINs found in database.");
-  process.exit(1);
-}
-
-console.log("ASINs fetched:", asins.length);
-
-
 
   const browser = await chromium.launch({ headless: true });
 
   let failedAsins = [];
   let processed = 0;
 
-
   for (let i = 0; i < asins.length; i += BATCH_SIZE) {
 
     const batch = asins.slice(i, i + BATCH_SIZE);
+
     const context = await browser.newContext({
-      userAgent: USER_AGENTS[Math.floor(Math.random()*3)]
+      userAgent: USER_AGENTS[Math.floor(Math.random() * 3)]
     });
 
     const page = await context.newPage();
@@ -136,17 +167,17 @@ console.log("ASINs fetched:", asins.length);
 
           const result = await scrapeSingle(page, asin);
 
-
           await supabase
             .from('amazon_price_history')
             .insert({
               asin,
               price: result.price,
-              is_limited_time_deal: result.isDeal
+              is_limited_time_deal: result.isDeal,
+              availability: result.availability
             });
 
-processed++;
-console.log("Processed count:", processed);
+          processed++;
+          console.log("Processed count:", processed);
 
           success = true;
           break;
@@ -180,7 +211,7 @@ console.log("Processed count:", processed);
     console.log("\n🔁 RETRYING FAILED ASINS:", failedAsins.length);
 
     const context = await browser.newContext({
-      userAgent: USER_AGENTS[Math.floor(Math.random()*3)]
+      userAgent: USER_AGENTS[Math.floor(Math.random() * 3)]
     });
 
     const page = await context.newPage();
@@ -194,7 +225,8 @@ console.log("Processed count:", processed);
           .insert({
             asin,
             price: result.price,
-            is_limited_time_deal: result.isDeal
+            is_limited_time_deal: result.isDeal,
+            availability: result.availability
           });
 
       } catch {
@@ -209,8 +241,26 @@ console.log("Processed count:", processed);
 
   await browser.close();
 
-  console.log("\n🏁 FINAL RUN COMPLETE");
+  console.log("\n🚩 FINAL RUN COMPLETE");
   console.log("Failed Count:", failedAsins.length);
+
+  await supabase.from('scrape_runs').insert({
+    total_asins: asins.length,
+    processed: processed,
+    failed: failedAsins.length
+  });
+
+  await supabase
+    .from('failed_asins')
+    .delete()
+    .eq('run_date', new Date().toISOString().split('T')[0]);
+
+  for (const asin of failedAsins) {
+    await supabase.from('failed_asins').insert({
+      asin,
+      error_message: "Scrape failed"
+    });
+  }
 }
 
 runScraper();

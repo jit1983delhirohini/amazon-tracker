@@ -1,5 +1,7 @@
 import { theme } from "../theme";
-import { LayoutDashboard, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, BarChart3, Settings, Bell } from "lucide-react";
+import { NavLink } from "react-router-dom";
+
 
 export default function Sidebar() {
   return (
@@ -7,27 +9,33 @@ export default function Sidebar() {
       <div style={styles.logo}>TWBP Analytics</div>
 
       <div style={styles.menu}>
-        <MenuItem icon={<LayoutDashboard size={18} />} label="Dashboard" active />
-        <MenuItem icon={<BarChart3 size={18} />} label="Analytics" />
-        <MenuItem icon={<Settings size={18} />} label="Settings" />
+<MenuItem icon={<LayoutDashboard size={18} />} label="Dashboard" to="/" />
+<MenuItem icon={<Bell size={18} />} label="Alerts" to="/alerts" />
+<MenuItem icon={<BarChart3 size={18} />} label="Analytics" to="/analytics" />
+<MenuItem icon={<Settings size={18} />} label="Settings" to="/settings" />
+
       </div>
     </div>
   );
 }
 
-function MenuItem({ icon, label, active }) {
+function MenuItem({ icon, label, to }) {
   return (
-    <div
-      style={{
+    <NavLink
+      to={to}
+      style={({ isActive }) => ({
         ...styles.menuItem,
-        background: active ? "#1E293B" : "transparent",
-      }}
+        background: isActive ? "#1E293B" : "transparent",
+        textDecoration: "none",
+        color: "white",
+      })}
     >
       {icon}
       <span>{label}</span>
-    </div>
+    </NavLink>
   );
 }
+
 
 const styles = {
   sidebar: {

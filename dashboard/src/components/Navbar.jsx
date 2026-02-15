@@ -1,8 +1,11 @@
 import { theme } from "../theme";
 import { LogOut } from "lucide-react";
 import { supabase } from "../supabase";
+import { useAuth } from "../context/AuthContext";
 
-export default function Navbar({ user }) {
+export default function Navbar() {
+  const { user } = useAuth();
+
   const logout = async () => {
     await supabase.auth.signOut();
     window.location.reload();
@@ -13,7 +16,7 @@ export default function Navbar({ user }) {
       <div>
         <div style={styles.title}>Amazon Price Intelligence</div>
         <div style={styles.subtitle}>
-          Welcome, {user?.email}
+          Welcome, {user?.user_metadata?.full_name || "User"}
         </div>
       </div>
 

@@ -1,29 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
+import { useAuth } from "./context/AuthContext";
+
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Alerts from "./pages/Alerts";
+import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
+
 
 function App() {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      }
-    );
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
+  const { session, loading } = useAuth();
 
   if (loading) return <div>Loading...</div>;
 
@@ -33,9 +19,31 @@ function App() {
         <Route
           path="/"
           element={
-            session ? <Dashboard session={session} /> : <Navigate to="/login" />
+            session ? <Dashboard /> : <Navigate to="/login" />
           }
         />
+
+        <Route
+          path="/alerts"
+          element={
+            session ? <Alerts /> : <Navigate to="/login" />
+          }
+        />
+
+<Route
+  path="/analytics"
+  element={
+    session ? <Analytics /> : <Navigate to="/login" />
+  }
+/>
+
+<Route
+  path="/settings"
+  element={
+    session ? <Settings /> : <Navigate to="/login" />
+  }
+/>
+
         <Route
           path="/login"
           element={!session ? <Login /> : <Navigate to="/" />}
