@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 console.log("SUPABASE URL:", process.env.SUPABASE_URL);
 
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 10;
 const MIN_DELAY = 15000;
 const MAX_DELAY = 22000;
 const MAX_RETRIES = 1;
@@ -82,11 +82,24 @@ async function runScraper() {
 
   console.log("🚀 SAFE MODE WITH RECOVERY");
 
-const { data: asins } = await supabase
-  .from('amazon_asins')
-  .select('asin')
-  .eq('is_active', true)
+const { data: asins, error } = await supabase
+  .from("amazon_asins")
+  .select("asin")
+  .eq("is_active", true)
   .limit(2);
+
+if (error) {
+  console.error("Error fetching ASINs:", error);
+  process.exit(1);
+}
+
+if (!asins || asins.length === 0) {
+  console.error("No ASINs found in database.");
+  process.exit(1);
+}
+
+console.log("ASINs fetched:", asins.length);
+
 
 
   const browser = await chromium.launch({ headless: true });
