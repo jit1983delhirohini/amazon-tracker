@@ -1,0 +1,190 @@
+import { chromium } from 'playwright';
+import { createClient } from '@supabase/supabase-js';
+import 'dotenv/config';
+console.log("SUPABASE URL:", process.env.SUPABASE_URL);
+
+const BATCH_SIZE = 50;
+const MIN_DELAY = 15000;
+const MAX_DELAY = 22000;
+const MAX_RETRIES = 1;
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...Chrome/120...',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...',
+  'Mozilla/5.0 (Windows NT 10.0; WOW64)...'
+];
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function randomDelay() {
+  return sleep(
+    MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY)
+  );
+}
+
+function isBlocked(content) {
+  return (
+    content.includes("Enter the characters you see") ||
+    content.includes("Robot Check") ||
+    content.includes("Sorry, we just need to make sure")
+  );
+}
+
+async function scrapeSingle(page, asin) {
+
+  await page.goto(`https://www.amazon.in/dp/${asin}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 60000
+  });
+
+  await page.waitForTimeout(4000);
+
+  const content = await page.content();
+  if (isBlocked(content)) {
+    throw new Error("BLOCKED_BY_AMAZON");
+  }
+
+  const price = await page.evaluate(() => {
+    const offscreen = document.querySelector('.a-price .a-offscreen');
+    if (offscreen) {
+      return parseFloat(
+        offscreen.innerText
+          .replace('₹', '')
+          .replace(/,/g, '')
+          .trim()
+      );
+    }
+    return null;
+  });
+
+  const isDeal = await page.evaluate(() => {
+    const badge = document.querySelector(
+      '#dealBadge_feature_div, .dealBadge, .a-badge-label'
+    );
+    if (!badge) return false;
+    return badge.innerText.toLowerCase()
+      .includes('limited time deal');
+  });
+
+  if (!price) throw new Error("PRICE_NOT_FOUND");
+
+  return { price, isDeal };
+}
+
+async function runScraper() {
+
+  console.log("🚀 SAFE MODE WITH RECOVERY");
+
+const { data: asins } = await supabase
+  .from('amazon_asins')
+  .select('asin')
+  .eq('is_active', true)
+  .limit(2);
+
+
+  const browser = await chromium.launch({ headless: true });
+
+  let failedAsins = [];
+
+  for (let i = 0; i < asins.length; i += BATCH_SIZE) {
+
+    const batch = asins.slice(i, i + BATCH_SIZE);
+    const context = await browser.newContext({
+      userAgent: USER_AGENTS[Math.floor(Math.random()*3)]
+    });
+
+    const page = await context.newPage();
+
+    for (const item of batch) {
+
+      const asin = item.asin;
+      let success = false;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+
+        try {
+          console.log("Checking:", asin);
+
+          const result = await scrapeSingle(page, asin);
+
+          await supabase
+            .from('amazon_price_history')
+            .insert({
+              asin,
+              price: result.price,
+              is_limited_time_deal: result.isDeal
+            });
+
+          success = true;
+          break;
+
+        } catch (err) {
+
+          if (err.message === "BLOCKED_BY_AMAZON") {
+            console.log("🚨 BLOCK DETECTED — STOPPING");
+            await browser.close();
+            return;
+          }
+
+          console.log("Retry:", asin);
+        }
+      }
+
+      if (!success) {
+        failedAsins.push(asin);
+      }
+
+      await randomDelay();
+    }
+
+    await context.close();
+    await sleep(30000);
+  }
+
+  // 🔁 RETRY FAILED ONCE MORE
+  if (failedAsins.length > 0) {
+
+    console.log("\n🔁 RETRYING FAILED ASINS:", failedAsins.length);
+
+    const context = await browser.newContext({
+      userAgent: USER_AGENTS[Math.floor(Math.random()*3)]
+    });
+
+    const page = await context.newPage();
+
+    for (const asin of failedAsins) {
+      try {
+        const result = await scrapeSingle(page, asin);
+
+        await supabase
+          .from('amazon_price_history')
+          .insert({
+            asin,
+            price: result.price,
+            is_limited_time_deal: result.isDeal
+          });
+
+      } catch {
+        console.log("Still failed:", asin);
+      }
+
+      await randomDelay();
+    }
+
+    await context.close();
+  }
+
+  await browser.close();
+
+  console.log("\n🏁 FINAL RUN COMPLETE");
+  console.log("Failed Count:", failedAsins.length);
+}
+
+runScraper();
